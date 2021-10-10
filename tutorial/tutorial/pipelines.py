@@ -14,14 +14,13 @@ class TutorialPipeline:
         # 连接数据库
         self.client = pymongo.MongoClient('mongodb://localhost:27017/')
         # 创建库
-        self.db = self.client['vulnerabledb111']
+        self.db = self.client['vulnerabledb222']
         # 创建表
-        self.table = self.db['vulnerabledb_datas']
+        self.table = self.db['vulnerabledb_datas222']
         self.count=0
     def process_item(self, item, spider):
         self.count=self.count+1
-        print(self.count)
         print(item)
-        self.table.update({'glsa_id':item['glsa_id']}, {'$set': dict(item)},True)
+        self.table.update({'identifiers':item['identifiers']}, {'$set': dict(item)},True)
         # self.table.find({}, {"glsa_id": 1, _id: 0}).sort({"likes": -1})
         return item
