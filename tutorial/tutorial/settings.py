@@ -67,8 +67,11 @@ DOWNLOADER_MIDDLEWARES = {
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
    'tutorial.pipelines.TutorialPipeline': 300,
+    # 启用scrapy自带的文件下载FilesPipeline
+    'scrapy.pipelines.files.FilesPipeline': 1
 }
-
+MEDIA_ALLOW_REDIRECTS =True
+FILES_STORE = 'D:\\workspace\\vulnerable_datas\\aaa'
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
 #AUTOTHROTTLE_ENABLED = True
