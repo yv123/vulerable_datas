@@ -3,7 +3,6 @@ import scrapy
 from bs4 import BeautifulSoup
 from tutorial.code import Language_code_arr
 from tutorial.items import TutorialItem
-from scrapy.selector import Selector
 import json
 class VulnerableDataSpider(scrapy.Spider):
     name = 'vulnerable_data'
@@ -70,7 +69,7 @@ class VulnerableDataSpider(scrapy.Spider):
         cvss2_list = []
         for item1 in cvss_version2_score:
             cvss2_obj = {}
-            from_2 = item1.select('div:nth-child(1) > div > div.col-lg-9.col-sm-6 > span')[0].text
+            from_2 = item1.select('div:nth-child(1)>div .col-lg-9 strong')[0].text
             base_score = item1.select('.severityDetail a')[0].text
             Vector = item1.select('div:nth-child(3)>span>span')[0].text
             cvss2_obj['type'] = from_2
@@ -107,13 +106,17 @@ class VulnerableDataSpider(scrapy.Spider):
                 hyper_link.append(patch_href)
             elif(('gitlab' in patch_href and '/commit/' in patch_href)):
                 hyper_link.append(patch_href)
-                # print(hyper_link,vulnerdate_obj['identifiers'])
-        print(hyper_link)
         if(len(hyper_link)!=0):
             for item in hyper_link:
                 #获取file及apis function_name
-                yield scrapy.Request(item, callback=self.fixed_versions,
-                               meta={'patch_href': item,'vulnerdate_obj':vulnerdate_obj})
+                if('commit' in item and 'git.kernel.org' in item):
+                    yield scrapy.Request(item, callback=self.get_file_path,
+                                         meta={'vulnerdate_obj': vulnerdate_obj, 'fixed_versions_item': [],
+                                               'patch_href': item}, dont_filter=True)
+                else:
+                    yield scrapy.Request(item, callback=self.fixed_versions,
+                                   meta={'patch_href': item,'vulnerdate_obj':vulnerdate_obj})
+
         else:
             yield vulnerdate_obj
     def fixed_versions(self,response):
@@ -143,10 +146,6 @@ class VulnerableDataSpider(scrapy.Spider):
         soup = BeautifulSoup(html_doc, "html.parser")
         if('commit' in patch_href and 'github' in patch_href):
             fixed_versions_list = soup.select('.js-details-container li a')
-            # 如果是github那就用GitHub api获取
-            # repos_name = re.findall(r"https://github.com/(.*)/commit", patch_href)
-            # commit_sha = re.findall(r"commit/(.*)", patch_href)
-            # new_patch_href = 'https://api.github.com/repos/' + repos_name[0] + '/commits/' + commit_sha[0]
         elif('commit' in patch_href and 'gitlab' in patch_href):
             fixed_versions_list = soup.select('.js-details-content  a')
         obj = {
@@ -172,7 +171,6 @@ class VulnerableDataSpider(scrapy.Spider):
                 bbb=item1.select('div.file-header.d-flex.flex-md-row.flex-column.flex-md-items-center.file-header--expandable.js-file-header > div.file-info.flex-auto.min-width-0.mb-md-0.mb-2 > a')
                 obj1['file']=(bbb[0].text).replace('\n','')
                 obj1['code_line']=[]
-                file_type=''
                 if(len(obj1['file'].split('.'))>=2):
                     file_type = obj1['file'].split('.')[1]
                 else:
@@ -183,12 +181,8 @@ class VulnerableDataSpider(scrapy.Spider):
                 blob_num_addition_arr=item1.select('tr .blob-num.blob-num-addition.js-linkable-line-number')
                 blob_num_addition_parent_arr=[]
                 for li in blob_num_addition_arr:
-                    # blob_num_addition_arr_obj={}
                     parent=li.parent
                     ll=parent.select('.blob-num.blob-num-addition.js-linkable-line-number')[0]['data-line-number']
-                    #当前行代码
-                    # blob_num_addition_arr_obj['line']=ll
-                    # blob_num_addition_arr_obj['code_str']=parent.text
                     blob_num_addition_parent_arr.append(ll)
                 obj1['blob_num_addition_parent_arr'] = blob_num_addition_parent_arr
                 for li in ccc:
@@ -206,14 +200,7 @@ class VulnerableDataSpider(scrapy.Spider):
                 #不需要爬取api了
                 raw_url_1 = re.findall(r"(.*)/commit", patch_href)[0]
                 commit_sha = re.findall(r"commit/(.*)", patch_href)[0]
-                repos_name = re.findall(r"https://github.com/(.*)/commit", patch_href)[0]
-                #获取raw_url文件 #将文件下载到本地
-                # get_raw_url= raw_url_1 + '/raw/' + commit_sha+'/'+bbb[0].text
                 get_raw_url= raw_url_1 + '/blob/' + commit_sha+'/'+bbb[0].text
-                # 将文件下载到本地#将文件下载到本地
-                # file_url_arr.append(get_raw_url)
-                # vulnerdate_obj['vulnerable_apis'].append(obj1)
-                # print(vulnerdate_obj)
                 yield scrapy.Request(get_raw_url, callback=self.get_snipaste_code,
                                      meta={'vulnerdate_obj': vulnerdate_obj,'vulnerable_apis':obj1,'patch_href': patch_href})
         elif('commit' in patch_href and 'gitlab' in patch_href):
@@ -257,8 +244,6 @@ class VulnerableDataSpider(scrapy.Spider):
                 yield scrapy.Request(get_raw_url, callback=self.get_snipaste_gitlab_code,
                                      meta={'vulnerdate_obj': vulnerdate_obj, 'vulnerable_apis': obj1,
                                            'patch_href': patch_href})
-            #将文件下载到本地
-            # vulnerdate_obj['file_urls']=file_url_arr
     def get_snipaste_code(self,response):
         vulnerable_apis = response.meta['vulnerable_apis']
         vulnerdate_obj = response.meta['vulnerdate_obj']
@@ -290,19 +275,31 @@ class VulnerableDataSpider(scrapy.Spider):
                                 elif(current_code_str[0]=='{'):
                                     #那么向上3行代码 就能匹配到函数
                                     current_code_str1 = response.xpath('string(//*[@id="LC' + str(current_line-1) + '"])').extract()[0].replace('\t','')
-                                    current_code_str2 = response.xpath('string(//*[@id="LC' + str(current_line-2) + '"])').extract()[0].replace('\t','')
-                                    current_code_str3 = response.xpath('string(//*[@id="LC' + str(current_line-3) + '"])').extract()[0].replace('\t','')
-                                    new_str=current_code_str3.rstrip()+' '+current_code_str2.rstrip()+' '+current_code_str1
+                                    # current_code_str2 = response.xpath('string(//*[@id="LC' + str(current_line-2) + '"])').extract()[0].replace('\t','')
+                                    # current_code_str3 = response.xpath('string(//*[@id="LC' + str(current_line-3) + '"])').extract()[0].replace('\t','')
+                                    # new_str=current_code_str3.rstrip()+' '+current_code_str2.rstrip()+' '+current_code_str1
+                                    # 从当前行往前扫描 直到扫描到（左括号
+                                    current_line -= 1
+                                    function_name_str = ''
+                                    if (response.xpath('string(//*[@id="LC' + str(current_line) + '"])')):
+                                        while (response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() != ''
+                                        and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() !='*/'):
+                                            print('++++')
+                                            function_name_str = response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').rstrip() + ' ' + function_name_str
+                                            current_line -= 1
+                                    print(function_name_str)
                                     function_name_body_title = re.findall(r'([A-Za-z_0-9]+\s*[\\*]*\s*[A-Za-z_0-9]+)\s*\([^)]*\)',
-                                                                          new_str)
+                                                                          function_name_str)
+                                    print(function_name_body_title)
                                     if(len(function_name_body_title)!=0):
                                         if(function_name_body_title[0] not in  vulnerable_apis['vulnerable_apis']):
                                             vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
                                     current_line-=3
                                     remain_modified_line_nums=0
 
-                                elif('if' not in current_code_str and('{' in current_code_str and re.findall(r'([A-Za-z_0-9]+\s*[\\*]*\s*[A-Za-z_0-9]+)\s*\([^)]*\)',
-                                                                          current_code_str))):
+                                # elif('if' not in current_code_str and('{' in current_code_str and re.findall(r'([A-Za-z_0-9]+\s*[\\*]*\s*[A-Za-z_0-9]+)\s*\([^)]*\)',
+                                #                                           current_code_str))):
+                                elif(current_code_str[0].isspace() == False and current_code_str[0] !='#' and '{' in current_code_str):
                                     current_line -= 1
                                     remain_modified_line_nums = 0
                                     function_name_body_title = re.findall(
@@ -331,19 +328,13 @@ class VulnerableDataSpider(scrapy.Spider):
         print(vulnerable_apis['file'])
         print(vulnerable_apis['code_line'])
         if(len(vulnerable_apis['code_line'])!=0):
-            # current_line;
             for item in vulnerable_apis['code_line']:
                 start_line=int(item.split('-')[0])
                 end_line=int(item.split('-')[1])
                 current_line=end_line
                 remain_modified_line_nums=0
                 while current_line>0 and (current_line>=start_line or remain_modified_line_nums>0):
-
                     current_code_str = soup.select('#LC' + str(current_line))[0].text
-                    print(current_line)
-                    print(remain_modified_line_nums)
-                    print(current_code_str)
-
                     if(str(current_line) in vulnerable_apis['blob_num_addition_parent_arr']):
                         #代表当前行是新增或者删除的漏洞的代码行
                         remain_modified_line_nums+=1
@@ -361,7 +352,6 @@ class VulnerableDataSpider(scrapy.Spider):
                                     current_line-=1
                                     remain_modified_line_nums=0
                                 elif(current_code_str[0]=='{'):
-                                    #那么向上3行代码 就能匹配到函数
                                     #从当前行往前扫描 直到扫描到（左括号
                                     current_line-=1
                                     function_name_str=''
@@ -370,9 +360,6 @@ class VulnerableDataSpider(scrapy.Spider):
                                             print('++++')
                                             function_name_str = (soup.select('#LC' + str(current_line))[0].text).rstrip()+' '+function_name_str
                                             current_line -= 1
-                                    print('-----')
-                                    print(function_name_str)
-                                    print('=========')
                                     function_name_body_title = re.findall(
                                         r'([A-Za-z_0-9]+\s*[\\*]*\s*[A-Za-z_0-9]+)\s*\([^)]*\)',
                                         function_name_str)
@@ -398,22 +385,15 @@ class VulnerableDataSpider(scrapy.Spider):
                             current_line-=1
         del vulnerable_apis['code_line']
         del vulnerable_apis['blob_num_addition_parent_arr']
-        print(vulnerable_apis)
         vulnerdate_obj['vulnerable_apis'].append(vulnerable_apis)
         yield vulnerdate_obj
     def parse(self, response):
         html_doc = response.body
         soup = BeautifulSoup(html_doc,"html.parser")
-        #======================================下载file文件到本地
-        # abc=TutorialItem()
-        # url='https://raw.githubusercontent.com/curl/curl/7f4a9a9b2a49547eae24d2e19bc5c346e9026479/lib/vtls/mbedtls.c'
-        # abc['file_urls'] = [url]
-        # abc['cwes'] = '1111'
-        # yield abc
-        # ======================================
         glsa_list = soup.select('body > div > div > div > div.table-responsive.mb-3 > table   tr')
-        for item in glsa_list[51:52]:
+        for item in glsa_list[3:4]:
             glsa_id = item.select('th a')[0].text
+            print(glsa_id)
             detail_url ='https://glsa.gentoo.org/glsa/'+glsa_id
             vulnerable_library=item.select('td')[0].text.split(':')[0]
             # 给详情页面发送请求
