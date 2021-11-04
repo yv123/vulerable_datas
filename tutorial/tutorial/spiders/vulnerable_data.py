@@ -175,8 +175,6 @@ class VulnerableDataSpider(scrapy.Spider):
                     file_type = obj1['file'].split('.')[1]
                 else:
                     file_type=''
-                if(file_type=='c'):
-                    vulnerdate_obj['program_language_of_source_code']=file_type
                 ccc=item1.select('table tr.js-expandable-line')
                 blob_num_addition_arr=item1.select('tr .blob-num.blob-num-addition.js-linkable-line-number')
                 blob_num_addition_parent_arr=[]
@@ -187,7 +185,7 @@ class VulnerableDataSpider(scrapy.Spider):
                 obj1['blob_num_addition_parent_arr'] = blob_num_addition_parent_arr
                 for li in ccc:
                    fff= li.select('.blob-code-hunk')
-                   if(fff[0].text):
+                   if(fff[0].text ):
                        modify_line_arr = re.findall(r'@@(.*?)@@', fff[0].text)[0].split('+')[1].split(',')
 
                        modify_line_arr_to_num = list(map(int, modify_line_arr))
@@ -201,8 +199,12 @@ class VulnerableDataSpider(scrapy.Spider):
                 raw_url_1 = re.findall(r"(.*)/commit", patch_href)[0]
                 commit_sha = re.findall(r"commit/(.*)", patch_href)[0]
                 get_raw_url= raw_url_1 + '/blob/' + commit_sha+'/'+bbb[0].text
-                yield scrapy.Request(get_raw_url, callback=self.get_snipaste_code,
+                if (file_type == 'c'):
+                    vulnerdate_obj['program_language_of_source_code'] = file_type
+                    yield scrapy.Request(get_raw_url, callback=self.get_snipaste_code,
                                      meta={'vulnerdate_obj': vulnerdate_obj,'vulnerable_apis':obj1,'patch_href': patch_href})
+                else:
+                    yield vulnerdate_obj
         elif('commit' in patch_href and 'gitlab' in patch_href):
             abc = soup.select('.files .diff-file.file-holder')
             for item1 in abc:
@@ -217,8 +219,6 @@ class VulnerableDataSpider(scrapy.Spider):
                     file_type = obj1['file'].split('.')[1]
                 else:
                     file_type = ''
-                if (file_type == 'c'):
-                    vulnerdate_obj['program_language_of_source_code'] = file_type
                 ccc = item1.select('table tr.line_holder.match')
                 blob_num_addition_arr = item1.select('.line_holder.new')
                 blob_num_addition_parent_arr = []
@@ -241,9 +241,13 @@ class VulnerableDataSpider(scrapy.Spider):
                 raw_url_1 = re.findall(r"(.*)/commit", patch_href)[0]
                 commit_sha = re.findall(r"commit/(.*)", patch_href)[0]
                 get_raw_url = raw_url_1 + '/blob/' + commit_sha + '/' + bbb[0].text+'?format=json&viewer=simple'
-                yield scrapy.Request(get_raw_url, callback=self.get_snipaste_gitlab_code,
+                if (file_type == 'c'):
+                    vulnerdate_obj['program_language_of_source_code'] = file_type
+                    yield scrapy.Request(get_raw_url, callback=self.get_snipaste_gitlab_code,
                                      meta={'vulnerdate_obj': vulnerdate_obj, 'vulnerable_apis': obj1,
                                            'patch_href': patch_href})
+                else:
+                    yield vulnerdate_obj
     def get_snipaste_code(self,response):
         vulnerable_apis = response.meta['vulnerable_apis']
         vulnerdate_obj = response.meta['vulnerdate_obj']
@@ -255,7 +259,6 @@ class VulnerableDataSpider(scrapy.Spider):
                 end_line=int(item.split('-')[1])
                 current_line=end_line
                 remain_modified_line_nums=0
-
                 while current_line>0 and (current_line>=start_line or remain_modified_line_nums>0):
                     current_code_str = response.xpath('string(//*[@id="LC'+str(current_line)+'"])').extract()[0]
                     print(current_code_str)
@@ -275,37 +278,27 @@ class VulnerableDataSpider(scrapy.Spider):
                                 elif(current_code_str[0]=='{'):
                                     #那么向上3行代码 就能匹配到函数
                                     current_code_str1 = response.xpath('string(//*[@id="LC' + str(current_line-1) + '"])').extract()[0].replace('\t','')
-                                    # current_code_str2 = response.xpath('string(//*[@id="LC' + str(current_line-2) + '"])').extract()[0].replace('\t','')
-                                    # current_code_str3 = response.xpath('string(//*[@id="LC' + str(current_line-3) + '"])').extract()[0].replace('\t','')
-                                    # new_str=current_code_str3.rstrip()+' '+current_code_str2.rstrip()+' '+current_code_str1
                                     # 从当前行往前扫描 直到扫描到（左括号
                                     current_line -= 1
                                     function_name_str = ''
                                     if (response.xpath('string(//*[@id="LC' + str(current_line) + '"])')):
                                         while (response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() != ''
                                         and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() !='*/'):
-                                            print('++++')
                                             function_name_str = response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').rstrip() + ' ' + function_name_str
                                             current_line -= 1
-                                    print(function_name_str)
                                     function_name_body_title = re.findall(r'([A-Za-z_0-9]+\s*[\\*]*\s*[A-Za-z_0-9]+)\s*\([^)]*\)',
                                                                           function_name_str)
-                                    print(function_name_body_title)
                                     if(len(function_name_body_title)!=0):
                                         if(function_name_body_title[0] not in  vulnerable_apis['vulnerable_apis']):
                                             vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
                                     current_line-=3
                                     remain_modified_line_nums=0
-
-                                # elif('if' not in current_code_str and('{' in current_code_str and re.findall(r'([A-Za-z_0-9]+\s*[\\*]*\s*[A-Za-z_0-9]+)\s*\([^)]*\)',
-                                #                                           current_code_str))):
                                 elif(current_code_str[0].isspace() == False and current_code_str[0] !='#' and '{' in current_code_str):
                                     current_line -= 1
                                     remain_modified_line_nums = 0
                                     function_name_body_title = re.findall(
                                         r'([A-Za-z_0-9]+\s*[\\*]*\s*[A-Za-z_0-9]+)\s*\([^)]*\)',
                                         current_code_str)
-                                    print(current_code_str)
                                     if (len(function_name_body_title) != 0):
                                         if (function_name_body_title[0] not in vulnerable_apis['vulnerable_apis']):
                                             vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
