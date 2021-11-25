@@ -12,7 +12,6 @@ class VulnerableDataSpider(scrapy.Spider):
     }
     #通过glsa的id查询详细信息
     def get_glsa_package_detail_info(self,response):
-        print(0)
         html_doc = response.body
         soup = BeautifulSoup(html_doc, "html.parser")
         affected_versions = soup.select(
@@ -26,7 +25,6 @@ class VulnerableDataSpider(scrapy.Spider):
         # 获取cve列表
         for item in cve_list:
             if ('CVE' in item.text and '(' not in item.text):
-                print(item.text)
                 vulnerdate_obj = TutorialItem()
                 vulnerdate_obj['vulnerable_library'] = response.meta['vulnerable_library']
                 vulnerdate_obj['unaffected_versions'] = unaffected_versions
@@ -48,11 +46,9 @@ class VulnerableDataSpider(scrapy.Spider):
                 vulnerdate_obj['vulnerable_code_snippet'] = []
                 vulnerdate_obj['program_language_of_source_code'] = ''
                 vulnerdate_obj['program_language_of_library'] = ''
-                print(get_cvss_url)
                 yield scrapy.Request(get_cvss_url, callback=self.get_cvss,
                                      meta={'vulnerdate_obj': vulnerdate_obj},dont_filter=True)
     def get_cvss(self,response):
-        print('9999999999999999999')
         vulnerdate_obj = response.meta['vulnerdate_obj']
         html_doc = response.body
         soup = BeautifulSoup(html_doc, "html.parser")
@@ -108,11 +104,9 @@ class VulnerableDataSpider(scrapy.Spider):
                 hyper_link.append(patch_href)
             elif(('gitlab' in patch_href and '/commit/' in patch_href)):
                 hyper_link.append(patch_href)
-        print(hyper_link)
         if(len(hyper_link)!=0):
             for item in hyper_link:
                 #获取file及apis function_name
-                # print(hyper_link)
                 yield scrapy.Request(item, callback=self.fixed_versions,
                                meta={'patch_href': item,'vulnerdate_obj':vulnerdate_obj},dont_filter=True)
 
@@ -121,12 +115,9 @@ class VulnerableDataSpider(scrapy.Spider):
     def fixed_versions(self,response):
         patch_href = response.meta['patch_href']
         vulnerdate_obj = response.meta['vulnerdate_obj']
-        print('fixed_versions1')
-        print('fixed_versions2')
         html_doc = response.body
         soup = BeautifulSoup(html_doc, "html.parser")
         if ('commit' in patch_href and 'github' in patch_href):  # 带commit的信息
-            print(1)
             path = soup.select('#repository-container-header > div.d-flex.mb-3.px-3.px-md-4.px-lg-5 > div > h1 > span.author.flex-self-stretch > a')[0].text
             path_library = soup.select(
                     '#repository-container-header > div.d-flex.mb-3.px-3.px-md-4.px-lg-5 > div > h1 > strong > a')[
@@ -144,8 +135,6 @@ class VulnerableDataSpider(scrapy.Spider):
     def get_versions(self,response):
         vulnerdate_obj = response.meta['vulnerdate_obj']
         patch_href = response.meta['patch_href']
-        print('get_versions_1')
-        print('get_versions_2')
         html_doc = response.body
         soup = BeautifulSoup(html_doc, "html.parser")
         if('commit' in patch_href and 'github' in patch_href):
@@ -158,17 +147,13 @@ class VulnerableDataSpider(scrapy.Spider):
         }
         for item in fixed_versions_list:
             obj['version'].append(item.text)
-        print('1111111111111111')
-        print(obj)
-        print('hhhhhhhhhhhhh')
         vulnerdate_obj['fixed_versions_and_patch'].append(obj)
         yield scrapy.Request(patch_href, callback=self.get_file_path,
                              meta={'vulnerdate_obj': vulnerdate_obj,'fixed_versions_item':obj,'patch_href':patch_href},dont_filter=True)
     def get_file_path(self,response):
         vulnerdate_obj = response.meta['vulnerdate_obj']
         obj = response.meta['fixed_versions_item']
-        print('get_file_path1')
-        print('get_file_path2')
+
         patch_href = response.meta['patch_href']
         html_doc = response.body
         soup = BeautifulSoup(html_doc, "html.parser")
@@ -179,7 +164,6 @@ class VulnerableDataSpider(scrapy.Spider):
                 bbb=item1.select('div.file-header.d-flex.flex-md-row.flex-column.flex-md-items-center.file-header--expandable.js-file-header > div.file-info.flex-auto.min-width-0.mb-md-0.mb-2 > a')
                 #获取文件名
                 obj1['file']=(bbb[0].text).replace('\n','')
-                print(obj1['file'])
                 obj1['code_line']=[]
                 if(len(obj1['file'].split('.'))>=2):
                     file_type = obj1['file'].split('/')[-1].split('.')[-1]
@@ -222,16 +206,16 @@ class VulnerableDataSpider(scrapy.Spider):
                 #不需要爬取api了
                 raw_url_1 = re.findall(r"(.*)/commit", patch_href)[0]
                 commit_sha = re.findall(r"commit/(.*)", patch_href)[0]
+                if('?' in patch_href):
+                    commit_sha=commit_sha.split('?')[0]
                 get_raw_url= raw_url_1 + '/blob/' + commit_sha+'/'+bbb[0].text
-                print('file_type',file_type,file_type == 'c' or file_type == 'h')
-                if (file_type == 'c' or file_type == 'h'):
+                if (file_type == 'c' or file_type == 'h' ):
                     vulnerdate_obj['program_language_of_source_code'] = file_type
                     yield scrapy.Request(get_raw_url, callback=self.get_snipaste_code,
                                      meta={'vulnerdate_obj': vulnerdate_obj,'vulnerable_apis':obj1,'patch_href': patch_href},dont_filter=True)
                 else:
                     yield vulnerdate_obj
         elif('commit' in patch_href and 'gitlab' in patch_href):
-            print(3)
             abc = soup.select('.files .diff-file.file-holder')
             for item1 in abc:
                 obj1 = {}
@@ -275,7 +259,7 @@ class VulnerableDataSpider(scrapy.Spider):
                 raw_url_1 = re.findall(r"(.*)/commit", patch_href)[0]
                 commit_sha = re.findall(r"commit/(.*)", patch_href)[0]
                 get_raw_url = raw_url_1 + '/blob/' + commit_sha + '/' + bbb[0].text+'?format=json&viewer=simple'
-                if (file_type == 'c' or file_type == 'h'):
+                if ((file_type == 'c' or file_type == 'h')):
                     vulnerdate_obj['program_language_of_source_code'] = file_type
                     yield scrapy.Request(get_raw_url, callback=self.get_snipaste_gitlab_code,
                                      meta={'vulnerdate_obj': vulnerdate_obj, 'vulnerable_apis': obj1,
@@ -283,14 +267,13 @@ class VulnerableDataSpider(scrapy.Spider):
                 else:
                     yield vulnerdate_obj
     def get_snipaste_code(self,response):
+        html_doc = response.body
+        soup = BeautifulSoup(html_doc, "html.parser")
         vulnerable_apis = response.meta['vulnerable_apis']
         vulnerdate_obj = response.meta['vulnerdate_obj']
         vulnerable_apis['vulnerable_apis']=[]
-        print(4)
-        print(vulnerable_apis['code_line'])
-        print(vulnerable_apis)
+        total_lines=len(soup.select('#repo-content-pjax-container > div > div.Box.mt-3.position-relative > div.Box-body.p-0.blob-wrapper.data.type-c.gist-border-0 > div > table tr'))
         if(len(vulnerable_apis['code_line'])!=0):
-            # current_line;
             for item in vulnerable_apis['code_line']:
                 start_line=int(item.split('-')[0])
                 end_line=int(item.split('-')[1])
@@ -298,147 +281,58 @@ class VulnerableDataSpider(scrapy.Spider):
                 remain_modified_line_nums=0
                 while current_line>0 and (current_line>=start_line or remain_modified_line_nums>0):
                     current_code_str = response.xpath('string(//*[@id="LC'+str(current_line)+'"])').extract()[0]
-                    print(current_line)
-                    print(current_code_str)
-                    print(str(current_line) in vulnerable_apis['blob_num_addition_parent_arr'])
                     #当前行是修改的行 那么漏洞函数有可能在它的上方，有可能他是漏洞函数（修改的是当前函数参数）
-                    if(str(current_line) in vulnerable_apis['blob_num_addition_parent_arr']):
-                    # if(str(current_line) in vulnerable_apis['blob_num_addition_parent_arr'] and (current_code_str[0].isspace() == True or current_code_str[0]=='}')):
+                    if(str(current_line) in vulnerable_apis['blob_num_addition_parent_arr']  ):
                         #代表当前行是新增或者删除的漏洞的代码行
                         remain_modified_line_nums+=1
-                        current_line -= 1
-                    else:
-                        print(remain_modified_line_nums)
-                        if(remain_modified_line_nums>0):
-                            current_code_str = delcommonds(current_code_str)
-                            if(len(current_code_str.strip())>0):
-                                if(current_code_str[0]=='}' or current_line==1):
-                                    #碰到右括号，代表上一个函数结束那么
-                                    #判断remain_modified_line_nums如果不为0 那么向下扫描
-                                    if(remain_modified_line_nums >0):
-                                        # current_line+=1
-                                        # remain_modified_line_nums=0
-                                        print('下一个')
-                                        if(current_line==1):
-                                            function_name_str=from_current_line_find_before(response,current_line)
-                                        else:
-                                            function_name_str = from_current_line_find_before(response,current_line+1)
-                                        function_name_body_title = re.findall(
-                                            r'([A-Za-z_0-9()]+\s*[\\*]*\s*[A-Za-z_0-9]+\s*\([^)]*\))',
-                                            function_name_str)
-                                        print("xixixi")
-                                        print(function_name_body_title)
-                                        print("hhhh")
-                                        if (len(function_name_body_title) != 0):
-                                            vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
-                                    current_line -= 1
-                                    remain_modified_line_nums = 0
-                                elif(current_code_str[0]=='{'):
-                                    print('------')
-                                    #那么向上3行代码 就能匹配到函数
-                                    # 从当前行往前扫描 直到扫描到（左括号
-                                    current_line -= 1
-                                    function_name_str = ''
-                                    if (response.xpath('string(//*[@id="LC' + str(current_line) + '"])')):
-                                        while (response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() != ''
-                                        and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() !='*/'
-                                        and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip()[0] !='#'
-                                        and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip()[0] !='}'):
-                                            print('[[[[')
-                                            print(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() !='#')
-                                            print(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t',''))
-                                            print('||||')
-                                            function_name_str = delcommonds(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').rstrip() )+ ' ' + function_name_str
-                                            current_line -= 1
-                                    print('000000')
-
-                                    print(function_name_str)
-                                    print('11111')
-                                    function_name_str = delcommonds(function_name_str)
-                                    function_name_body_title = re.findall(r'([A-Za-z_0-9()]+\s*[\\*]*\s*[A-Za-z_0-9]+\s*\([^)]*\))',
-                                                                          function_name_str)
-                                    print('ss',function_name_body_title)
-                                    print('ss',len(function_name_body_title))
-                                    if(len(function_name_body_title)!=0):
-                                        print('99',function_name_body_title[0] not in  vulnerable_apis['vulnerable_apis'])
-                                        if(function_name_body_title[0] not in  vulnerable_apis['vulnerable_apis']):
-                                            vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
-                                    current_line-=3
-                                    remain_modified_line_nums=0
-                                elif(current_code_str[0].isspace() == False and current_code_str[0] != '{' and current_code_str[0] !='#' and '{' in current_code_str):
-                                    print(']]]]]]]]')
-                                    function_name_str=''
-                                    if (response.xpath('string(//*[@id="LC' + str(current_line) + '"])')):
-                                        while (response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() != ''
-                                        and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() !='*/'
-                                        # and '//' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t', '').strip()
-                                        and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip()[0] !='#'):
-                                            function_name_str = delcommonds(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').rstrip()) + ' ' + function_name_str
-                                            current_line -= 1
-                                    remain_modified_line_nums = 0
-                                    # 去掉注释
-                                    current_code_str = delcommonds(function_name_str)
+                        # current_line -= 1
+                    if(remain_modified_line_nums>0):
+                        current_code_str = delcommonds(current_code_str)
+                        if(len(current_code_str.strip())>0):
+                            if(current_code_str[0]=='}' or current_line==1):
+                                #碰到右括号，代表上一个函数结束那么
+                                #判断remain_modified_line_nums如果不为0 那么向下扫描
+                                if(remain_modified_line_nums >0):
+                                    if(current_line==1):
+                                        function_name_str = from_current_line_find_before(response,current_line,vulnerable_apis['blob_num_addition_parent_arr'],total_lines)
+                                    else:
+                                        function_name_str = from_current_line_find_before(response, current_line + 1,vulnerable_apis['blob_num_addition_parent_arr'],total_lines)
                                     function_name_body_title = re.findall(
-                                        r'([A-Za-z_0-9()]+\s*[\\*]*\s*[A-Za-z_0-9]+\s*\([^)]*\))',
-                                        current_code_str)
+                                        r'([A-Za-z_0-9()*]+\s+[\\*]*\s*[A-Za-z_0-9]+\s*\([^)].*\))\s*{',
+                                        function_name_str)
+                                    if (len(function_name_body_title) != 0):
+                                        vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
+                                current_line -= 1
+                                remain_modified_line_nums = 0
+                            elif ('{' in current_code_str and '}' not in  current_code_str):
+                                function_name_str=''
+                                if (response.xpath('string(//*[@id="LC' + str(current_line) + '"])')):
+                                    while (current_line>=1 and'}' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
+                                    and ';' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
+                                    and test_if_have_for(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')) == False
+                                    and test_if_define(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')) == False
+                                    ):
+                                        function_name_str = delcommonds(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').rstrip()) + ' ' + function_name_str
+                                        current_line -= 1
+                                function_name_str = delcommonds(function_name_str)
+                                # 去掉注释
+                                if(len(function_name_str.strip()) !=0):
+                                    function_name_body_title = re.findall(
+                                        r'([A-Za-z_0-9()*]+\s+[\\*]*\s*[A-Za-z_0-9]+\s*\([^)].*\))\s*{',
+                                        function_name_str)
                                     if (len(function_name_body_title) != 0):
                                         if (function_name_body_title[0] not in vulnerable_apis['vulnerable_apis']):
                                             vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
-                                elif (current_code_str[0].isspace() == True and '{' in current_code_str and '}' not in  current_code_str and len(current_code_str.strip())!=1 and
-                                      'if' not in current_code_str
-                                and  ';' not in current_code_str and  'else' not in current_code_str
-                                      and  'switch' not in current_code_str and 'case' not in current_code_str
-                                      and  'while' not in current_code_str and 'switch' not in current_code_str and 'for' not in current_code_str
-                                      and ' do' not in current_code_str):
-                                    function_name_str=''
-                                    if (response.xpath('string(//*[@id="LC' + str(current_line) + '"])')):
-                                        while (response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() != ''
-                                        and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() !='*/'
-                                        # and ' // ' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and ' if ' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and 'switch' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and 'case' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and 'else' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and ' do' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and 'for' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and 'while' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and 'switch' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-                                        and response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip()[0] !='#'):
-                                            function_name_str = delcommonds(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').rstrip()) + ' ' + function_name_str
-                                            current_line -= 1
-                                    print('0000000000000000')
-                                    print(current_code_str.strip())
-                                    print(len(current_code_str.strip())!=1)
-                                    print(len(current_code_str.strip()))
-                                    print(function_name_str)
-                                    function_name_str = delcommonds(function_name_str)
-                                    print(function_name_str)
-                                    print('1111111111111111')
-                                    # 去掉注释
-                                    if(len(function_name_str.strip()) !=0 and ' if ' not in function_name_str  and  'switch' not in function_name_str
-                                            and  'case' not in function_name_str and   'else' not in function_name_str
-                                            and ' do' not in function_name_str and 'for' not in function_name_str
-                                            and 'while' not in function_name_str and 'switch' not in function_name_str):
-                                        function_name_body_title = re.findall(
-                                            r'([A-Za-z_0-9()]+\s*[\\*]*\s*[A-Za-z_0-9]+\s*\([^)]*\))',
-                                            function_name_str)
-                                        print('-----------------------')
-                                        print(function_name_body_title)
-                                        print(len(function_name_body_title))
-                                        print('--------------------------')
-                                        if (len(function_name_body_title) != 0):
-                                            print('0011111')
-                                            print(function_name_body_title[0])
-                                            if (function_name_body_title[0] not in vulnerable_apis['vulnerable_apis']):
-                                                vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
-                                            remain_modified_line_nums=0
+                                        remain_modified_line_nums=0
                                 else:
                                     current_line-=1
                             else:
-                                #向上扫描碰到空格的时候，考虑下
                                 current_line-=1
                         else:
+                            #向上扫描碰到空格的时候，考虑下
                             current_line-=1
+                    else:
+                        current_line-=1
         del vulnerable_apis['code_line']
         del vulnerable_apis['blob_num_addition_parent_arr']
         vulnerdate_obj['vulnerable_apis'].append(vulnerable_apis)
@@ -449,8 +343,7 @@ class VulnerableDataSpider(scrapy.Spider):
         vulnerable_apis = response.meta['vulnerable_apis']
         vulnerdate_obj = response.meta['vulnerdate_obj']
         vulnerable_apis['vulnerable_apis']=[]
-        print(vulnerable_apis)
-        print(vulnerable_apis['code_line'])
+        total_lines=soup.select('#blob-content > div.blob-content > pre > code span')
         if(len(vulnerable_apis['code_line'])!=0):
             for item in vulnerable_apis['code_line']:
                 start_line=int(item.split('-')[0])
@@ -459,125 +352,55 @@ class VulnerableDataSpider(scrapy.Spider):
                 remain_modified_line_nums=0
                 while current_line>0 and (current_line>=start_line or remain_modified_line_nums>0):
                     current_code_str = soup.select('#LC' + str(current_line))[0].text
-                    print(current_line)
-                    print(current_code_str)
-                    print(str(current_line) in vulnerable_apis['blob_num_addition_parent_arr'])
-                    print(current_code_str.strip() != '')
-                    if(str(current_line) in vulnerable_apis['blob_num_addition_parent_arr'] and current_code_str.strip() != '' and current_code_str[0].isspace() == True):
+                    if(str(current_line) in vulnerable_apis['blob_num_addition_parent_arr']):
                         #代表当前行是新增或者删除的漏洞的代码行
                         remain_modified_line_nums+=1
-                        current_line -= 1
-                    else:
-                        if(remain_modified_line_nums>0):
-                            if(len(current_code_str)>0):
-                                current_code_str1 = soup.select('#LC' + str(current_line))[0].text
-                                if(soup.select('#LC' + str(current_line - 1))):
-                                    current_code_str2 = soup.select('#LC' + str(current_line - 1))[0].text
-                                if(soup.select('#LC' + str(current_line - 2))):
-                                    current_code_str3 = soup.select('#LC' + str(current_line - 2))[0].text
-                                new_str = current_code_str3.rstrip() + ' ' + current_code_str2.rstrip() + ' ' + current_code_str1
-                                if(current_code_str[0]=='}'):
-                                    current_line-=1
-                                    remain_modified_line_nums=0
-                                elif(current_code_str[0]=='{' ):
-                                    #从当前行往前扫描 直到扫描到（左括号
-                                    current_line-=1
-                                    function_name_str=''
-                                    if(soup.select('#LC'+str(current_line))):
-                                        while((soup.select('#LC'+str(current_line))[0].text).strip() != ''
-                                        and (soup.select('#LC'+str(current_line))[0].text).strip() != '*/'
-                                        # and '//' not in (soup.select('#LC'+str(current_line))[0].text)
-                                        and (soup.select('#LC'+str(current_line))[0].text).strip()[0] != '#'
-                                        and (soup.select('#LC'+str(current_line))[0].text).strip()[0] != '}'):
-                                            function_name_str = delcommonds((soup.select('#LC' + str(current_line))[0].text).rstrip())+' '+function_name_str
-                                            current_line -= 1
-                                    print("-------")
-                                    print(function_name_str)
-                                    print("======")
-                                    #去掉注释
-                                    function_name_str=delcommonds(function_name_str)
+                        # current_line -= 1
+                    if(remain_modified_line_nums>0):
+                        if(len(current_code_str)>0):
+                            if(current_code_str[0]=='}' or  current_line==1):
+                                if(remain_modified_line_nums>0):
+                                    if(current_line==1):
+                                        function_name_str=from_current_line_find_before_gitlab(soup,current_line,vulnerable_apis['blob_num_addition_parent_arr'],total_lines)
+                                    else:
+                                        function_name_str=from_current_line_find_before_gitlab(soup,current_line+1,vulnerable_apis['blob_num_addition_parent_arr'],total_lines)
                                     function_name_body_title = re.findall(
-                                        r'([A-Za-z_0-9()]+\s*[\\*]*\s*[A-Za-z_0-9]+\s*\([^)]*\))',
+                                        r'([A-Za-z_0-9()*]+\s+[\\*]*\s*[A-Za-z_0-9]+\s*\([^)].*\))\s*{',
                                         function_name_str)
                                     if(len(function_name_body_title)!=0):
-                                        if(function_name_body_title[0] not in  vulnerable_apis['vulnerable_apis']):
-                                            vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
-                                    remain_modified_line_nums=0
-                                elif(current_code_str[0].isspace() == False and current_code_str[0] !='{' and current_code_str[0] !='#' and '{' in current_code_str):
-                                    function_name_str = ''
-                                    if (soup.select('#LC' + str(current_line))):
-                                        while ((soup.select('#LC' + str(current_line))[0].text).strip() != ''
-                                               and ' if ' not in soup.select('#LC' + str(current_line))[0].text
-                                               # and ' // ' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'switch' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'case' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'else' not in soup.select('#LC' + str(current_line))[0].text
-                                               and ' do' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'for' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'while' not in soup.select('#LC' + str(current_line))[0].text
-                                               and (soup.select('#LC' + str(current_line))[0].text).strip() != '*/'
-                                               and (soup.select('#LC' + str(current_line))[0].text).strip()[0] != '#'):
+                                        vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
+                                current_line-=1
+                                remain_modified_line_nums=0
+                            elif('{' in current_code_str and '}' not in  current_code_str):
+                                function_name_str = ''
+                                if (soup.select('#LC' + str(current_line))):
+                                    while (current_line>=1
+                                           and '}' not in soup.select('#LC' + str(current_line))[0].text
+                                           and ';' not in soup.select('#LC' + str(current_line))[0].text
+                                           and test_if_have_for(soup.select('#LC' + str(current_line))[0].text) == False
+                                           and test_if_define(soup.select('#LC' + str(current_line))[0].text) == False
+                                    ):
                                             function_name_str = delcommonds((soup.select('#LC' + str(current_line))[
-                                                                     0].text).rstrip())+ ' ' + function_name_str
+                                                                 0].text).rstrip()) + ' ' + function_name_str
                                             current_line -= 1
-
-                                    # 去掉注释
-                                    new_str = delcommonds(new_str)
-                                    print('00000')
-                                    print(new_str)
-                                    print('11111')
+                                # 去掉注释
+                                function_name_str = delcommonds(function_name_str)
+                                if(len(function_name_str.strip()) !=0):
                                     function_name_body_title = re.findall(
-                                        r'([A-Za-z_0-9()]+\s*[\\*]*\s*[A-Za-z_0-9]+\s*\([^)]*\))',
-                                        new_str)
-                                    current_line -= 2
+                                        r'([A-Za-z_0-9()*]+\s+[\\*]*\s*[A-Za-z_0-9]+\s*\([^)].*\))\s*{',
+                                        function_name_str)
                                     if (len(function_name_body_title) != 0):
                                         if (function_name_body_title[0] not in vulnerable_apis['vulnerable_apis']):
                                             vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
                                         remain_modified_line_nums = 0
-                                elif(current_code_str[0].isspace() == True and '{' in current_code_str and '}' not in  current_code_str and len(current_code_str.strip())!=1 and  'if' not in current_code_str
-                                and  ';' not in current_code_str and  ' do' not in current_code_str  and 'case' not in current_code_str and  'switch' not in current_code_str and   'else' not in current_code_str  and  'while' not in current_code_str and 'switch' not in current_code_str and 'for' not in current_code_str):
-
-                                    function_name_str = ''
-                                    if (soup.select('#LC' + str(current_line))):
-                                        while ((soup.select('#LC' + str(current_line))[0].text).strip() != ''
-                                               and (soup.select('#LC' + str(current_line))[0].text).strip() != '*/'
-                                               and ' if ' not in soup.select('#LC' + str(current_line))[0].text
-                                               # and '//' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'if ' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'switch' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'case' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'else' not in soup.select('#LC' + str(current_line))[0].text
-                                               and ' do' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'for' not in soup.select('#LC' + str(current_line))[0].text
-                                               and 'while' not in soup.select('#LC' + str(current_line))[0].text
-                                               and (soup.select('#LC' + str(current_line))[0].text).strip()[0] != '#'):
-                                                print(' if ' not in soup.select('#LC' + str(current_line))[0].text)
-                                                function_name_str = delcommonds((soup.select('#LC' + str(current_line))[
-                                                                     0].text).rstrip()) + ' ' + function_name_str
-                                                current_line -= 1
-                                    # 去掉注释
-                                    function_name_str = delcommonds(function_name_str)
-                                    print("哈哈哈哈哈")
-                                    print(function_name_str)
-                                    print("嘿嘿嘿")
-                                    if(len(function_name_str.strip()) !=0 and ' if ' not in function_name_str and  'else' not in current_code_str
-                                            and  'switch' not in current_code_str and 'case' not in current_code_str
-                                            and  ' do' not in current_code_str and 'for' not in function_name_str
-                                            and 'while' not in function_name_str and 'switch' not in function_name_str):
-                                        function_name_body_title = re.findall(
-                                            r'([A-Za-z_0-9()]+\s*[\\*]*\s*[A-Za-z_0-9]+\s*\([^)]*\))',
-                                            function_name_str)
-                                        print('77777777777777777')
-                                        if (len(function_name_body_title) != 0):
-                                            if (function_name_body_title[0] not in vulnerable_apis['vulnerable_apis']):
-                                                vulnerable_apis['vulnerable_apis'].append(function_name_body_title[0])
-                                            remain_modified_line_nums = 0
                                 else:
                                     current_line-=1
                             else:
                                 current_line-=1
                         else:
                             current_line-=1
+                    else:
+                        current_line-=1
         del vulnerable_apis['code_line']
         del vulnerable_apis['blob_num_addition_parent_arr']
         vulnerdate_obj['vulnerable_apis'].append(vulnerable_apis)
@@ -586,67 +409,76 @@ class VulnerableDataSpider(scrapy.Spider):
         html_doc = response.body
         soup = BeautifulSoup(html_doc,"html.parser")
         glsa_list = soup.select('body > div > div > div > div.table-responsive.mb-3 > table   tr')
-        item='https://github.com/rdesktop/rdesktop/commit/4dca546d04321a610c1835010b5dad85163b65e1'
-        vulnerdate_obj = TutorialItem()
-        # 在cve页面获取信息
-        vulnerdate_obj['fixed_versions_and_patch'] = []
-        vulnerdate_obj['vulnerable_apis'] = []
-        vulnerdate_obj['vulnerable_code_snippet'] = []
-        vulnerdate_obj['program_language_of_source_code'] = ''
-        vulnerdate_obj['program_language_of_library'] = ''
-        yield scrapy.Request(item, callback=self.fixed_versions,
-                             meta={'patch_href': item, 'vulnerdate_obj': vulnerdate_obj})
-        return
-        print(len(glsa_list))
-        return
-        for item in glsa_list[515:516]:
-        # for item in glsa_list[2500:3000]:
+        # item='https://github.com/ImageMagick/ImageMagick/commit/d8ab7f046587f2e9f734b687ba7e6e10147c294b'
+        # vulnerdate_obj = TutorialItem()
+        # # 在cve页面获取信息
+        # vulnerdate_obj['fixed_versions_and_patch'] = []
+        # vulnerdate_obj['vulnerable_apis'] = []
+        # vulnerdate_obj['vulnerable_code_snippet'] = []
+        # vulnerdate_obj['program_language_of_source_code'] = ''
+        # vulnerdate_obj['program_language_of_library'] = ''
+        # yield scrapy.Request(item, callback=self.fixed_versions,
+        #                      meta={'patch_href': item, 'vulnerdate_obj': vulnerdate_obj})
+        # return
+        # print(len(glsa_list))
+        # return
+        for item in glsa_list[3000:3253]:
             glsa_id = item.select('th a')[0].text
 
             detail_url ='https://glsa.gentoo.org/glsa/'+glsa_id
             vulnerable_library=item.select('td')[0].text.split(':')[0]
-            print(detail_url)
-            print(vulnerable_library)
             # 给详情页面发送请求
             yield scrapy.Request(detail_url, callback=self.get_glsa_package_detail_info,meta={'vulnerable_library':vulnerable_library},dont_filter=True)
 def delcommonds(content):
     out = re.sub(r'/\*.*?\*/', '', content, flags=re.S)
     out = re.sub(r'(//.*)', '', out)
+    out = re.sub(r'(#.*)', '', out)
     return out
-def from_current_line_find_before(response,current_line):
+def from_current_line_find_before(response,current_line,blob_num_addition_parent_arr,total_lines):
     function_name_str=''
-    if(current_line==1 and  '/*' in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip()):
-        while (response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','').strip() !='*/'):
-            function_name_str=function_name_str+response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-            '\t', '')
-            current_line += 1
-        current_line += 1
+    modify = 0
+    function_name_str_delete=''
     while ('}' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')
-           and ' if ' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
+           and current_line <=total_lines
+           and test_if_have_for(response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t','')) == False):
+           function_name_str = function_name_str+' '+response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
                 '\t', '')
-           and ';' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-                '\t', '')
-           and ' if' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-                '\t', '')
-           and 'if ' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-                '\t', '')
-           and 'switch' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[
-               0].replace('\t', '')
-           and 'case' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-                '\t', '')
-           and 'else' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-                '\t', '')
-           and ' do' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-                '\t', '')
-           and 'for' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-                '\t', '')
-           and 'while' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-                '\t', '')
-           and 'switch' not in response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[
-               0].replace('\t', '')
-    ):
-        function_name_str = function_name_str+' '+response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace(
-            '\t', '').rstrip()
-        current_line +=1
-    function_name_str_delete=delcommonds(function_name_str)
+           if (response.xpath('string(//*[@id="LC' + str(current_line) + '"])').extract()[0].replace('\t', '')):
+               if (str(current_line) in blob_num_addition_parent_arr):
+                   modify += 1
+           current_line +=1
+    if (modify != 0):
+        function_name_str_delete = delcommonds(function_name_str)
+    else:
+        function_name_str_delete = ''
     return function_name_str_delete
+def from_current_line_find_before_gitlab(soup,current_line,blob_num_addition_parent_arr,total_lines):
+    function_name_str=''
+    modify=0
+    function_name_str_delete=''
+    while ('}' not in soup.select('#LC' + str(current_line))
+           and current_line <= total_lines
+           and test_if_have_for(soup.select('#LC' + str(current_line))[0].text) == False):
+           #如果当前元素不为空，并且有改动 往下找 +1
+           if(soup.select('#LC' + str(current_line))):
+               if(str(current_line) in blob_num_addition_parent_arr ):
+                   modify+=1
+           function_name_str = function_name_str+' '+soup.select('#LC' + str(current_line))[0].text
+           current_line +=1
+    if(modify!=0):
+        function_name_str_delete=delcommonds(function_name_str)
+    else:
+        function_name_str_delete=''
+    return function_name_str_delete
+def test_if_have_for(current_code_str):
+    str=re.search(r'(for|if|while|switch)\s*\(.*', current_code_str)
+    if (str):
+        return True
+    else:
+        return False
+def test_if_define(current_code_str):
+    str = re.search(r'(#ifdef|#endif).*', current_code_str)
+    if (str):
+        return True
+    else:
+        return False
